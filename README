@@ -3,3 +3,9 @@ like you see in spreadsheets. See example.svg for usage.
 
 The install.sh script installs the extension into the user's Inkscape extensions
 directory on linux systems.
+
+TODOS
+=====
+
+Consider adding an option to have a bounding box and grid lines to the table
+The vertical alignment in cells is kind of hackish, try to improve it
