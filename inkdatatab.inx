@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
+  <_name>Create data table</_name>
+  <id>inkdatatab</id>
+  <param name="numrows" type="int" min="0" max="100" _gui-text="Number of rows">5</param>
+  <param name="row_sep" type="int" _gui-text="Add this many pixels between rows">0</param>
+  <effect>
+    <object-type>all</object-type>
+      <effects-menu>
+        <submenu _name="Data table"/>
+      </effects-menu>
+  </effect>
+  <script>
+    <command reldir="extensions" interpreter="python">inkdatatab.py</command>
+  </script>
+</inkscape-extension>
