@@ -1,2 +1,5 @@
 This is an Inkscape extension that creates tables for reporting tabular values
 like you see in spreadsheets. See example.svg for usage.
+
+The install.sh script installs the extension into the user's Inkscape extensions
+directory on linux systems.
