@@ -4,6 +4,9 @@
   <id>inkdatatab</id>
   <param name="numrows" type="int" min="0" max="100" _gui-text="Number of rows">5</param>
   <param name="row_sep" type="int" _gui-text="Add this many pixels between rows">0</param>
+  <param name="bbox" type="boolean" _gui-text="Create a bounding box rectangle around table">false</param>
+  <param name="hgrid" type="boolean" _gui-text="Create horizontal grid lines for every row">false</param>
+  <param name="vgrid" type="boolean" _gui-text="Create vertical grid lines for every column">false</param>
   <effect>
     <object-type>all</object-type>
       <effects-menu>

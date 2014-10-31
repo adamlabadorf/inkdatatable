@@ -118,18 +118,17 @@ def formatStyle(style) :
     return ' '.join('%s: %s;'%i for i in style.items())
 
 def check_flowbox(n) :
-    try :
-        if n.tag.endswith("rect") or \
-          (n.tag.endswith("flowRoot") and \
-           n[0].tag.endswith("flowRegion") and \
-           n[0][0].tag.endswith("rect")) :
-            return True
-    except :
-        pass
-    return False
+  try :
+      if n.tag.endswith("flowRoot") and \
+         n[0].tag.endswith("flowRegion") and \
+         n[1].tag.endswith("flowPara") :
+          return True
+  except :
+      pass
+  return False
 
 def check_rect(n) :
-    return n.tag.endswith("rect")
+  return n.tag.endswith("rect")
 
 class Effect:
   """A class for creating Inkscape SVG Effects"""
@@ -148,10 +147,6 @@ class Effect:
     self.parser.add_option("--numrows",
             type="int", dest="numrows", default=5,
             help="Number of rows to create")
-    self.parser.add_option("--row_rect",
-            type="string", dest="row_rect", action="callback",
-            callback=lambda _,opt,val,par : True if val=="true" else False,
-            help="Create background rect only for every row, instead of for all cells")
     self.parser.add_option("--row_sep",
             type="int", dest="row_sep", default=0,
             help="Add this many pixels of space between rows")
@@ -159,66 +154,105 @@ class Effect:
             type="string", dest="align", default=None,
             help=("Align columns according to l, c, or r, e.g. 3 columns "
                   "aligned left, center, left would be --align=lcl"))
+    self.parser.add_option("--bbox",
+            type="string", dest="bbox",
+            help="Create a bounding rect around whole table")
+    self.parser.add_option("--hgrid",
+            type="string", dest="hgrid",
+            help="Create horizontal grid lines for every row")
+    self.parser.add_option("--vgrid",
+            type="string", dest="vgrid",
+            help="Create vertical grid lines for every column")
 
   def effect(self):
 
     if not self.options.ids :
-        errormsg("No objects were selected, must select at least one object to "
+      errormsg("No objects were selected, must select at least one object to "
                  "create a table\n")
-        sys.exit(1)
+      sys.exit(1)
 
     sel = self.selected.values()
-    sel.sort(key=lambda n: float(n.get("x")))
 
     # table works in 3 creation modes:
     # only rects
     # rects with one text object
     # n rects with n text objects
     rect_sel = [s for s in sel if s.tag.endswith("rect")]
+    rect_sel.sort(key=lambda n: float(n.get("x")))
+
     text_sel = [s for s in sel if s.tag.endswith("text")]
+    text_sel.sort(key=lambda n: float(n.get("x")))
+
+    flow_sel = [s for s in sel if s.tag.endswith("flowRoot")]
 
     if len(text_sel) not in (0,1,len(rect_sel)) :
-        errormsg("When specifying text objects, there must be exactly zero, "
-                 "one, or a number equal to the number of rects.")
-        sys.exit(1)
+      errormsg("When specifying text objects, there must be exactly zero, "
+               "one, or a number equal to the number of rects.")
+      sys.exit(1)
 
     if not all(map(check_rect,rect_sel)) :
-        errormsg("All non-text selected objects must be rects")
-        sys.exit(1)
+      errormsg("All non-text selected objects must be rects")
+      sys.exit(1)
 
-    if len(rect_sel)+len(text_sel) != len(sel) :
-        errormsg("Items other than rects and text are selected, remove them "
-                 "from the selection")
-        sys.exit(1)
+    if len(flow_sel) not in (0,1) :
+      errormsg("At most one text area (flowRoot) object must be selected")
+      sys.exit(1)
 
-    align_map = {'l':('start','start'),
-                 'c':('center','middle'),
-                 'r':('end','end')}
-    align = self.options.align and [align_map[a] for a in self.options.align] or None
-    if align and len(align) != len(rect_sel) :
-        errormsg("When specifying alignment, must be exactly the same number "
-                 "of [l|c|r] as rects")
-        sys.exit(1)
+    flow = flow_sel[0] if len(flow_sel) == 1 else None
+    if flow is not None and not check_flowbox(flow) :
+      errormsg("Something went wrong with the flowbox. The XML needs to look "
+               "like :\n<flowRoot>\n\t<flowRegion>\n\t\t<rect>...</rect>\n\t</flowRegion>\n"
+               "\t<flowPara>\"text 1, text 2, text 3, ...</flowPara>\n"
+               "\t<flowPara>...</flowPara>\n"
+               "\t...")
+      sys.exit(1)
 
+    if len(rect_sel)+len(text_sel)+len(flow_sel) != len(sel) :
+      errormsg("Items other than rects and text are selected, remove them "
+               "from the selection")
+      sys.exit(1)
+
+    # for use in specifying text styles
     text_sel = cycle(text_sel or [None])
-    align = cycle(align or [align_map['l']])
 
     # figure out top left corner
     lefts = [float(n.get("x")) for n in rect_sel]
     left = lefts[0]
-    top = round(float(rect_sel[0].get("y")))
+    top = float(rect_sel[0].get("y"))
 
-    # height needs to be an integer otherwise there are odd artefacts when
-    # drawing
-    height = floor(float(rect_sel[0].get("height")))
+    # rect positions and styles
+    height = float(rect_sel[0].get("height"))
 
     widths = [float(n.get("width")) for n in rect_sel]
+    width = lefts[-1]+widths[-1]-lefts[0]
+
     styles = [n.get("style") for n in rect_sel]
 
+    # svg elements needed
     parent = self.current_layer
     table_g_attr = {'id': self.uniqueId("table_g"),
                     'transform': 'translate(%f,%f)'%(left,top) }
     table_g = etree.SubElement(parent,addNS("g","svg"), table_g_attr)
+
+    # background rect for each column because inkscape can't seem to abutt
+    # one rect exactly up to the other due to anti-aliasing
+    # https://bugs.launchpad.net/inkscape/+bug/170356
+    # only do this if row_sep is zero
+    if self.options.row_sep == 0 :
+      bg_g_attr = {'id':self.uniqueId("table_bg_g"),
+                   'transform': 'translate(0,0)'}
+      bg_g = etree.SubElement(table_g,addNS("g","svg"), bg_g_attr)
+
+      for l,w,s in zip(lefts,widths,styles) :
+        x = float(l-left)
+        h = height*self.options.numrows
+        attr = {'x': str(x),
+                'y': str(0),
+                'width': str(w),
+                'height': str(h),
+                'style': s
+                }
+        etree.SubElement(bg_g,addNS("rect","svg"),attr)
 
     cell_g_attr = {'id':self.uniqueId("cell_g"),
                    'transform': 'translate(0,0)'}
@@ -228,59 +262,108 @@ class Effect:
                    'transform': 'translate(0,0)'}
     text_g = etree.SubElement(table_g,addNS("g","svg"), text_g_attr)
 
+    # if user specified a flowRoot with csv values in it, parse
+    flow_txt = cycle([None])
+    if flow is not None :
+      flow_txt = []
+      for c in flow :
+        if c.tag.endswith('flowPara') :
+          flow_txt.extend([t.strip() for t in c.text.split(',')])
+      flow_txt = iter(flow_txt)
+
+    # create the main table
     for r_i in range(self.options.numrows) :
-        for l,w,s in zip(lefts,widths,styles) :
-            # cell
-            x = float(l-left)
-            h = round(height*r_i)
-            y = h+r_i*self.options.row_sep
-            attr = {'x': str(x),
-                    'y': str(y),
-                    'width': str(w),
-                    'height': str(height),
-                    'style': s
-                    }
-            etree.SubElement(cell_g,addNS("rect","svg"),attr)
+      for l,w,s in zip(lefts,widths,styles) :
+        # cell
+        x = float(l-left)
+        h = height*r_i
+        y = h+r_i*self.options.row_sep
+        attr = {'x': str(x),
+                'y': str(y),
+                'width': str(w),
+                'height': str(height),
+                'style': s
+                }
+        etree.SubElement(cell_g,addNS("rect","svg"),attr)
 
-            # text object
-            t_y = y+height/2
+          
+        # text object
+        t_y = y+height/2
 
-            attr = {'y': str(t_y),
-                    '{%s}space'%NSS['xml']: 'preserve',
-                    'style': formatStyle({'baseline-shift': '-15%' })
-                    }
+        attr = {'y': str(t_y),
+                '{%s}space'%NSS['xml']: 'preserve',
+                'style': formatStyle({'baseline-shift': '-15%' })
+                }
 
-            tspan_attr = {'style': 'baseline-shift: -10%;'}
+        tspan_attr = {'style': 'baseline-shift: -10%;'}
 
-            # try to figure out what the alignment was, if any
-            t_align, t_anchor = 'start','start'
-            curr_text_sel = text_sel.next()
-            if curr_text_sel is not None :
-                attr['style'] += curr_text_sel.get('style')
-                style_d = parseStyle(attr['style'])
+        # try to figure out what the alignment was, if any
+        t_align, t_anchor = 'start','start'
+        curr_text_sel = text_sel.next()
+        if curr_text_sel is not None :
+            attr['style'] += curr_text_sel.get('style')
+            style_d = parseStyle(attr['style'])
 
-                t_align = style_d.get('text-align',t_align)
-                t_anchor = style_d.get('text-anchor',t_anchor)
+            t_align = style_d.get('text-align',t_align)
+            t_anchor = style_d.get('text-anchor',t_anchor)
 
-                if len(curr_text_sel) > 0 :
-                    tspan_attr['style'] += curr_text_sel[0].get('style','')
+            if len(curr_text_sel) > 0 :
+                tspan_attr['style'] += curr_text_sel[0].get('style','')
 
-            if t_align == "center" :
-                t_x = x + w/2
-            elif t_align == "end" :
-                t_x = x + w-3
-            else :
-                t_x = x+3
+        if t_align == "center" :
+            t_x = x + w/2
+        elif t_align == "end" :
+            t_x = x + w-3
+        else :
+            t_x = x+3
 
-            attr['x'] = str(t_x)
+        attr['x'] = str(t_x)
 
-            text_node = etree.SubElement(text_g,addNS("text","svg"),attr)
-            tspan_node = etree.SubElement(text_node,addNS("tspan","svg"),tspan_attr)
-            tspan_node.text = "a"
-
-    # make the bounding box
+        text_node = etree.SubElement(text_g,addNS("text","svg"),attr)
+        tspan_node = etree.SubElement(text_node,addNS("tspan","svg"),tspan_attr)
+        txt = flow_txt.next()
+        tspan_node.text = txt or "a"
 
     # make the grid lines
+    line_grid_g = None
+    grid_attr = {'id':self.uniqueId("grid_g"),
+                 'transform': 'translate(0,0)'}
+    if self.options.hgrid or self.options.vgrid :
+      line_grid_g = line_grid_g if line_grid_g is not None else \
+        etree.SubElement(table_g,addNS("g","svg"),grid_attr)
+
+      if self.options.hgrid == "true" :
+        for r_i in range(1,self.options.numrows) :
+          h = height*r_i
+          attr = {'x1': '0',
+                  'y1': str(h),
+                  'x2': str(width),
+                  'y2': str(h),
+                  'style': 'stroke:#000000;stroke-width:1'}
+          etree.SubElement(line_grid_g,addNS("line","svg"),attr)
+
+      if self.options.vgrid == "true" :
+        for l in lefts[1:] :
+          l -= left
+          attr = {'x1': str(l),
+                  'y1': '0',
+                  'x2': str(l),
+                  'y2': str(height*self.options.numrows),
+                  'style': 'stroke:#000000;stroke-width:1'}
+          etree.SubElement(line_grid_g,addNS("line","svg"),attr)
+
+    # make the bounding box
+    if self.options.bbox == "true" :
+      line_grid_g = line_grid_g if line_grid_g is not None else \
+        etree.SubElement(table_g,addNS("g","svg"),grid_attr)
+
+      attr = {'x': '0',
+              'y': '0',
+              'width': str(width),
+              'height': str(height*self.options.numrows),
+              'style': 'fill:none;stroke:#000000;stroke-width:1'}
+      bbox = etree.SubElement(line_grid_g,addNS("rect","svg"),attr)
+
 
   def getoptions(self,args=sys.argv[1:]):
     """Collect command line arguments"""
