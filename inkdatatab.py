@@ -337,7 +337,6 @@ class Effect:
         tspan_node = etree.SubElement(text_node,addNS("tspan","svg"),tspan_attr)
         try :
             txt = flow_txt.next()
-            debug(txt)
         except StopIteration :
             errormsg("The data provided in either the selected text box or "
                      "data file is shorter than the number of cells specified")
