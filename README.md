@@ -8,3 +8,4 @@ TODOS
 =====
 
   - The vertical alignment in cells is kind of hackish, try to improve it
+  - Consider changing the cells from rects to clones with svg:use
