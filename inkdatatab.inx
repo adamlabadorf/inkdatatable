@@ -7,6 +7,8 @@
   <param name="bbox" type="boolean" _gui-text="Create a bounding box rectangle around table">false</param>
   <param name="hgrid" type="boolean" _gui-text="Create horizontal grid lines for every row">false</param>
   <param name="vgrid" type="boolean" _gui-text="Create vertical grid lines for every column">false</param>
+  <param type="description" _gui-text="Specifying a data file ignores the number of rows field"/>
+  <param name="csv" type="string" _gui-text="Path to a CSV file to use as data"></param>
   <effect>
     <object-type>all</object-type>
       <effects-menu>

@@ -20,8 +20,9 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 """
 import sys, copy, optparse, random, re
+import csv
 import gettext
-from itertools import cycle
+from itertools import cycle, chain
 from math import *
 _ = gettext.gettext
 
@@ -163,6 +164,9 @@ class Effect:
     self.parser.add_option("--vgrid",
             type="string", dest="vgrid",
             help="Create vertical grid lines for every column")
+    self.parser.add_option("--csv",
+            type="string", dest="csv",
+            help="Path to CSV file that contains data to create table")
 
   def effect(self):
 
@@ -212,6 +216,8 @@ class Effect:
                "from the selection")
       sys.exit(1)
 
+    numrows = self.options.numrows
+
     # for use in specifying text styles
     text_sel = cycle(text_sel or [None])
 
@@ -234,6 +240,23 @@ class Effect:
                     'transform': 'translate(%f,%f)'%(left,top) }
     table_g = etree.SubElement(parent,addNS("g","svg"), table_g_attr)
 
+    # if user specified a flowRoot with csv values in it, parse
+    flow_txt = cycle([None])
+    if flow is not None :
+      flow_txt = []
+      for c in flow :
+        if c.tag.endswith('flowPara') :
+          flow_txt.extend([t.strip() for t in c.text.split(',')])
+      flow_txt = iter(flow_txt)
+
+    # if the user specified a CSV file, read it and set all the params
+    # accordingly
+    if self.options.csv :
+        f = csv.reader(open(self.options.csv))
+        r = [r for r in f]
+        numrows = len(r)
+        flow_txt = chain(*r)
+
     # background rect for each column because inkscape can't seem to abutt
     # one rect exactly up to the other due to anti-aliasing
     # https://bugs.launchpad.net/inkscape/+bug/170356
@@ -245,7 +268,7 @@ class Effect:
 
       for l,w,s in zip(lefts,widths,styles) :
         x = float(l-left)
-        h = height*self.options.numrows
+        h = height*numrows
         attr = {'x': str(x),
                 'y': str(0),
                 'width': str(w),
@@ -262,17 +285,8 @@ class Effect:
                    'transform': 'translate(0,0)'}
     text_g = etree.SubElement(table_g,addNS("g","svg"), text_g_attr)
 
-    # if user specified a flowRoot with csv values in it, parse
-    flow_txt = cycle([None])
-    if flow is not None :
-      flow_txt = []
-      for c in flow :
-        if c.tag.endswith('flowPara') :
-          flow_txt.extend([t.strip() for t in c.text.split(',')])
-      flow_txt = iter(flow_txt)
-
     # create the main table
-    for r_i in range(self.options.numrows) :
+    for r_i in range(numrows) :
       for l,w,s in zip(lefts,widths,styles) :
         # cell
         x = float(l-left)
@@ -321,7 +335,14 @@ class Effect:
 
         text_node = etree.SubElement(text_g,addNS("text","svg"),attr)
         tspan_node = etree.SubElement(text_node,addNS("tspan","svg"),tspan_attr)
-        txt = flow_txt.next()
+        try :
+            txt = flow_txt.next()
+            debug(txt)
+        except StopIteration :
+            errormsg("The data provided in either the selected text box or "
+                     "data file is shorter than the number of cells specified")
+            sys.exit(1)
+
         tspan_node.text = txt or "a"
 
     # make the grid lines
@@ -333,7 +354,7 @@ class Effect:
         etree.SubElement(table_g,addNS("g","svg"),grid_attr)
 
       if self.options.hgrid == "true" :
-        for r_i in range(1,self.options.numrows) :
+        for r_i in range(1,numrows) :
           h = height*r_i
           attr = {'x1': '0',
                   'y1': str(h),
@@ -348,7 +369,7 @@ class Effect:
           attr = {'x1': str(l),
                   'y1': '0',
                   'x2': str(l),
-                  'y2': str(height*self.options.numrows),
+                  'y2': str(height*numrows),
                   'style': 'stroke:#000000;stroke-width:1'}
           etree.SubElement(line_grid_g,addNS("line","svg"),attr)
 
@@ -360,7 +381,7 @@ class Effect:
       attr = {'x': '0',
               'y': '0',
               'width': str(width),
-              'height': str(height*self.options.numrows),
+              'height': str(height*numrows),
               'style': 'fill:none;stroke:#000000;stroke-width:1'}
       bbox = etree.SubElement(line_grid_g,addNS("rect","svg"),attr)
 
