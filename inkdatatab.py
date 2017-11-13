@@ -65,6 +65,7 @@ def uutounit(val, unit):
 
 try:
   from lxml import etree
+  from xml.etree import ElementTree
 except:
   sys.exit(_('The fantastic lxml wrapper for libxml2 is required by inkex.py and therefore this extension. Please download and install the latest version from http://cheeseshop.python.org/pypi/lxml/, or install it through your package manager by a command like: sudo apt-get install python-lxml'))
 
@@ -98,7 +99,7 @@ def check_inkbool(option, opt, value):
 
 def addNS(tag, ns=None):
   val = tag
-  if ns!=None and len(ns)>0 and NSS.has_key(ns) and len(tag)>0 and tag[0]!='{':
+  if ns!=None and len(ns)>0 and ns in NSS and len(tag)>0 and tag[0]!='{':
     val = "{%s}%s" % (NSS[ns], tag)
   return val
 
@@ -313,7 +314,7 @@ class Effect:
 
         # try to figure out what the alignment was, if any
         t_align, t_anchor = 'start','start'
-        curr_text_sel = text_sel.next()
+        curr_text_sel = next(text_sel)
         if curr_text_sel is not None :
             attr['style'] += curr_text_sel.get('style')
             style_d = parseStyle(attr['style'])
@@ -336,7 +337,7 @@ class Effect:
         text_node = etree.SubElement(text_g,addNS("text","svg"),attr)
         tspan_node = etree.SubElement(text_node,addNS("tspan","svg"),tspan_attr)
         try :
-            txt = flow_txt.next()
+            txt = next(flow_txt)
         except StopIteration :
             errormsg("The data provided in either the selected text box or "
                      "data file is shorter than the number of cells specified")
@@ -464,7 +465,8 @@ class Effect:
 
   def output(self):
     """Serialize document into XML on stdout"""
-    self.document.write(sys.stdout)
+    docstr = ElementTree.tostring(self.document.getroot(),encoding="unicode")
+    sys.stdout.write(docstr)
 
   def affect(self, args=sys.argv[1:], output=True):
     """Affect an SVG document with a callback effect"""
